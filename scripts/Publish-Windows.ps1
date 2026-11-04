@@ -5,14 +5,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $output = [IO.Path]::GetFullPath($OutputDirectory)
-Push-Location (Join-Path $repo 'src\web')
-try {
-    & npm ci --no-audit --no-fund
-    if ($LASTEXITCODE -ne 0) { throw 'Installing frontend dependencies failed.' }
-    & npm run build
-    if ($LASTEXITCODE -ne 0) { throw 'Building the frontend failed.' }
-} finally { Pop-Location }
-
+# The project's standalone target builds and embeds the fresh frontend for every publish entry point.
 & dotnet publish (Join-Path $repo 'src\SupercarsTiming.Server') --configuration Release --runtime win-x64 `
     --self-contained true -p:Standalone=true -p:DebugType=embedded --output $output
 if ($LASTEXITCODE -ne 0) { throw 'Publishing the Windows application failed.' }
