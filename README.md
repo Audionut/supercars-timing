@@ -117,10 +117,20 @@ automatic browser launch; `Standalone:DataDirectory=<absolute path>` selects a s
 on the command line or through an environment variable). The executable needs no companion assets or settings
 file; its initial schedule and defaults are embedded.
 
-The **Windows application** GitHub Actions workflow builds and smoke-tests the executable on pushes to `main`
-or `windows-single-file`, pull requests, and manual runs. Download `SupercarsTiming-windows-x64` from the run's
-artifacts. Pushing a version tag such as `v0.1.0` also attaches the executable directly to a GitHub Release. The
-release job alone receives repository write permission. To run the same packaged-app checks locally:
+The **Windows application** GitHub Actions workflow runs only when started manually. Open **Actions → Windows
+application → Run workflow** and select a branch to build and smoke-test the executable. Download
+`SupercarsTiming-windows-x64` from the run's artifacts. GitHub requires the workflow file on the repository's
+default branch before [manual runs](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
+are available.
+
+To attach the executable to a GitHub Release, manually run the workflow against an existing version tag:
+
+```powershell
+gh workflow run windows-build.yml --ref v0.1.0
+```
+
+The release job runs only for tags starting with `v` and is the only job with repository write permission.
+To run the same packaged-app checks locally:
 
 ```powershell
 pwsh -NoProfile -File scripts/Test-WindowsBuild.ps1 -Executable dist/win-x64/SupercarsTiming.Server.exe

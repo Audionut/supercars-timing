@@ -63,8 +63,9 @@ Natsoft only around sessions, and an experimental pit rejoin ghost. Next round: 
   opens the browser and prevents duplicate feed processes. Data lives in `%LOCALAPPDATA%\SupercarsTiming`.
   `ScheduleStore` validates and atomically imports timetables through the portable-only menu/API, wakes the feed,
   and serves the same timetable to `calendar.ts` before rendering. Normal server deployment remains available.
-  `.github/workflows/windows-build.yml` builds/tests the executable, uploads an artifact, and publishes version
-  tags to GitHub Releases. `scripts/Test-WindowsBuild.ps1` runs offline checks against an isolated copy of the exe.
+  `.github/workflows/windows-build.yml` runs only on manual dispatch: it builds/tests the executable and uploads an
+  artifact. A manual run against an existing `v*` tag also publishes it to GitHub Releases; pushing a tag alone does
+  nothing. `scripts/Test-WindowsBuild.ps1` runs offline checks against an isolated copy of the exe.
 
 - `src/SupercarsTiming.Natsoft` (no ASP.NET dependency; protocol and domain logic):
   - `NatsoftDecoder`: XOR-chain frame decoding. `NatsoftClient`: the WebSocket client (reconnects: 30 s while not
