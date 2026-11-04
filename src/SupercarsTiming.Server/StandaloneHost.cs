@@ -21,20 +21,34 @@ public static class StandaloneHost
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SupercarsTiming"));
         Directory.CreateDirectory(data);
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args, ContentRootPath = data });
+        var hostUrls = builder.Configuration[WebHostDefaults.ServerUrlsKey];
         // Never read configuration from the directory the user happened to launch the executable from.
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddJsonStream(Assembly.GetExecutingAssembly().GetManifestResourceStream("Standalone.appsettings.json")!)
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Feed:ScheduleFile"] = "schedule/supercars.json" })
             .AddJsonFile(Path.Combine(data, "settings.json"), optional: true)
             .AddEnvironmentVariables().AddCommandLine(args);
-        builder.Configuration["AllowedHosts"] = "127.0.0.1;localhost";
-        builder.WebHost.UseUrls(Url(builder.Configuration));
+        var urls = builder.Configuration[WebHostDefaults.ServerUrlsKey] ?? hostUrls;
+        if (string.IsNullOrWhiteSpace(urls))
+        {
+            builder.Configuration["AllowedHosts"] = "127.0.0.1;localhost";
+            urls = Url(builder.Configuration);
+        }
+        builder.WebHost.UseUrls(urls);
         builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 1_048_576);
         return builder;
     }
 
     public static string Url(IConfiguration config)
     {
+        var firstUrl = config[WebHostDefaults.ServerUrlsKey]?.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+        if (firstUrl is not null)
+        {
+            var address = BindingAddress.Parse(firstUrl);
+            // Wildcard listeners accept network connections, but the local browser needs a destination address.
+            var host = address.Host is "0.0.0.0" or "[::]" or "*" or "+" ? "127.0.0.1" : address.Host;
+            return $"{address.Scheme}://{host}:{address.Port}{address.PathBase}";
+        }
         var port = config.GetValue("Standalone:Port", 5085);
         if (port is < 1 or > 65535) throw new ArgumentException("Standalone:Port must be between 1 and 65535.");
         return $"http://127.0.0.1:{port}";

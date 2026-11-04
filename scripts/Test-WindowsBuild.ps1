@@ -35,6 +35,10 @@ try {
         } catch { Start-Sleep -Milliseconds 200 }
     }
     if (!$ready -or !$features.scheduleImport) { throw 'The portable application did not become ready.' }
+    $networkHost = @{ Host = 'timing.local' }
+    if ((Invoke-WebRequest "$url/api/features" -Headers $networkHost -SkipHttpErrorCheck).StatusCode -ne 400) {
+        throw 'Default loopback hosting did not retain its local Host filter.'
+    }
     $html = (Invoke-WebRequest $url).Content
     $asset = [regex]::Match($html, 'src="(/assets/[^\"]+\.js)"').Groups[1].Value
     if (!$asset -or (Invoke-WebRequest "$url$asset").StatusCode -ne 200) { throw 'Embedded frontend assets were not served.' }
@@ -69,9 +73,33 @@ try {
         catch { if ($process.HasExited) { throw 'Restart failed.' }; Start-Sleep -Milliseconds 200 }
     }
     if (!$persisted) { throw 'The imported timetable did not survive a restart.' }
-    Write-Output 'Windows binary passed: isolated launch, embedded assets, both series, schedule validation/import/persistence, duplicate launch.'
+    $process.Kill()
+    $process.WaitForExit()
+    # A fresh wildcard port avoids the previous loopback listener's closing connections on Windows.
+    $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, 0)
+    $listener.Start()
+    $networkPort = $listener.LocalEndpoint.Port
+    $listener.Stop()
+    $networkUrl = "http://127.0.0.1:$networkPort"
+    $networkArguments = @($arguments | Where-Object { $_ -notlike '--Standalone:Port=*' }) + @('--Standalone:Port=1', "--urls=http://0.0.0.0:$networkPort")
+    $process = Start-Process -FilePath $app -ArgumentList $networkArguments -WorkingDirectory $workingDir -WindowStyle Hidden -PassThru `
+        -RedirectStandardOutput (Join-Path $testRoot 'network-stdout.log') -RedirectStandardError (Join-Path $testRoot 'network-stderr.log')
+    $deadline = [DateTime]::UtcNow.AddSeconds(20)
+    $networkReady = $false
+    while ([DateTime]::UtcNow -lt $deadline) {
+        try {
+            $networkReady = (Invoke-WebRequest "$networkUrl/api/features" -Headers $networkHost -TimeoutSec 2).StatusCode -eq 200
+            break
+        } catch { if ($process.HasExited) { throw 'Explicit URL hosting failed.' }; Start-Sleep -Milliseconds 200 }
+    }
+    if (!$networkReady) { throw 'The explicit --urls address was not used or the network Host header was refused.' }
+    $networkLog = Get-Content -LiteralPath (Join-Path $testRoot 'network-stdout.log') -Raw
+    if (!$networkLog.Contains("Now listening on: http://0.0.0.0:$networkPort") -or !$networkLog.Contains("Supercars Timing is ready at $networkUrl")) {
+        throw 'The listener or local browser address did not follow --urls.'
+    }
+    Write-Output 'Windows binary passed: isolated launch, embedded assets, both series, schedule validation/import/persistence, duplicate launch, explicit network URL and default loopback hosting.'
 } catch {
-    foreach ($log in @('stdout.log', 'stderr.log')) {
+    foreach ($log in @('stdout.log', 'stderr.log', 'network-stdout.log', 'network-stderr.log')) {
         $path = Join-Path $testRoot $log
         if (Test-Path -LiteralPath $path) { Get-Content -LiteralPath $path }
     }
